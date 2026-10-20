@@ -1,0 +1,46 @@
+name: Remote CI and Versioned Artifact
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Build Remote
+        run: npm run build
+      - name: Verify federation entry exists
+        run: test -f dist/remoteEntry.js
+      - name: Package versioned artifact
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then VERSION="${{ github.sha }}"; fi
+          mkdir -p "release/remotes/remoteApp/$VERSION"
+          cp -R dist/. "release/remotes/remoteApp/$VERSION/"
+          printf '{"remoteApp":"remotes/remoteApp/%s/remoteEntry.js"}\n' "$VERSION" > "release/microfrontends-$VERSION.json"
+          (cd release && zip -qr "../remote-$VERSION.zip" .)
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-${{ github.ref_name }}
+          path: remote-*.zip
+          if-no-files-found: error
+          retention-days: 30
