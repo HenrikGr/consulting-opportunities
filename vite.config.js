@@ -9,7 +9,9 @@ export default defineConfig({
       name: 'remoteApp',
       filename: 'remoteEntry.js',
       exposes: { './FeatureButton': './src/FeatureButton.jsx' },
-      shared: { react: { singleton: true }, 'react-dom': { singleton: true } },
+      shared: {
+        react: { singleton: true },
+        'react-dom': { singleton: true } },
     }),
   ],
   build: { target: 'esnext', outDir: 'dist', emptyOutDir: true },
