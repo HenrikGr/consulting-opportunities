@@ -1,45 +1,125 @@
+
 name: Remote CI and Versioned Artifact
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Read Remote version
+        id: remote-version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::package.json version '$VERSION' is not a valid stable SemVer version (X.Y.Z)."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Remote version: $VERSION"
+
+      - name: Validate version against latest tag
+        id: validate-version
+        shell: bash
+        env:
+          VERSION: ${{ steps.remote-version.outputs.version }}
+        run: |
+          git fetch --tags --force
+
+          LATEST_TAG="$(
+            git tag --list 'v[0-9]*.[0-9]*.[0-9]*' |
+            grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' |
+            sort -V |
+            tail -n 1
+          )"
+
+          if [[ -z "$LATEST_TAG" ]]; then
+            echo "No existing SemVer tag found. Version $VERSION can be the initial release."
+            echo "latest_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST_VERSION="${LATEST_TAG#v}"
+
+          echo "Latest tag: $LATEST_TAG"
+          echo "package.json version: $VERSION"
+
+          if [[ "$(printf '%s\n%s\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]] ||
+             [[ "$VERSION" == "$LATEST_VERSION" ]]; then
+            echo "::error::Version $VERSION must be greater than latest tag $LATEST_TAG."
+            exit 1
+          fi
+
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Build Remote
         run: npm run build
+
       - name: Verify federation entry exists
         run: test -f dist/remoteEntry.js
+
       - name: Package versioned artifact
         shell: bash
+        env:
+          VERSION: ${{ steps.remote-version.outputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then VERSION="${{ github.sha }}"; fi
           mkdir -p "release/remotes/remoteApp/$VERSION"
           cp -R dist/. "release/remotes/remoteApp/$VERSION/"
-          printf '{"remoteApp":"remotes/remoteApp/%s/remoteEntry.js"}\n' "$VERSION" > "release/microfrontends-$VERSION.json"
+
+          printf '{"remoteApp":"remotes/remoteApp/%s/remoteEntry.js"}\n' "$VERSION" \
+            > "release/microfrontends-$VERSION.json"
+
           (cd release && zip -qr "../remote-$VERSION.zip" .)
+
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: remote-${{ github.ref_name }}
-          path: remote-*.zip
+          name: remote-${{ steps.remote-version.outputs.version }}
+          path: remote-${{ steps.remote-version.outputs.version }}.zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create version tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          VERSION: ${{ steps.remote-version.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Published versions must not be reused."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          echo "Created version tag $TAG"
