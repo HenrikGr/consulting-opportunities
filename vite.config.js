@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     federation({
-      name: 'remoteApp',
-      filename: 'remoteEntry.js',
+      name: 'consultingOpportunities',
+      filename: 'consultingOpportunitiesEntry.js',
       exposes: { './FeatureButton': './src/FeatureButton.jsx' },
       shared: {
         react: { singleton: true },
@@ -16,7 +16,7 @@ export default defineConfig({
     }),
   ],
   define: {
-    __REMOTE_VERSION__: JSON.stringify(packageJson.version),
+    __CONSULTING_OPPORTUNITIES_VERSION__: JSON.stringify(packageJson.version),
   },
   build: { target: 'esnext', outDir: 'dist', emptyOutDir: true },
   server: { port: 5001, strictPort: true },
