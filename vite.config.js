@@ -3,16 +3,21 @@ import react from '@vitejs/plugin-react';
 import { federation } from '@module-federation/vite';
 import packageJson from './package.json';
 
+const federationName = packageJson.name.replace(/[-_.\s]+(.)?/g, (_, character) =>
+  character ? character.toUpperCase() : '',
+);
+
 export default defineConfig({
   plugins: [
     react(),
     federation({
-      name: 'remoteApp',
-      filename: 'remoteEntry.js',
+      name: federationName,
+      filename: `${federationName}Entry.js`,
       exposes: { './FeatureButton': './src/FeatureButton.jsx' },
       shared: {
         react: { singleton: true },
-        'react-dom': { singleton: true } },
+        'react-dom': { singleton: true },
+      },
     }),
   ],
   define: {

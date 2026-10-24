@@ -8,11 +8,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.remote.outputs.version }}
 
     steps:
       - name: Checkout
@@ -28,25 +30,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Read Remote version
-        id: remote-version
+      - name: Read and validate remote configuration
+        id: remote
         shell: bash
         run: |
-          VERSION="$(node -p "require('./package.json').version")"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import process from 'node:process';
 
-          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::package.json version '$VERSION' must use stable SemVer format X.Y.Z."
-            exit 1
-          fi
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const repositoryName = process.env.GITHUB_REPOSITORY.split('/').at(-1);
+          const version = packageJson.version;
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Remote version: $VERSION"
+          if (packageJson.name !== repositoryName) {
+            console.error(`package.json name '${packageJson.name}' must match repository name '${repositoryName}'.`);
+            process.exit(1);
+          }
+
+          if (!/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version)) {
+            console.error(`package.json version '${version}' must use stable SemVer format X.Y.Z.`);
+            process.exit(1);
+          }
+
+          const federationName = repositoryName.replace(/[-_.\s]+(.)?/g, (_, character) =>
+            character ? character.toUpperCase() : '',
+          );
+          const entryFile = `${federationName}Entry.js`;
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            `repository_name=${repositoryName}`,
+            `federation_name=${federationName}`,
+            `entry_file=${entryFile}`,
+            `version=${version}`,
+          ].join('\n') + '\n');
+
+          console.log(`Remote: ${repositoryName}`);
+          console.log(`Federation identity: ${federationName}`);
+          console.log(`Entry file: ${entryFile}`);
+          console.log(`Version: ${version}`);
+          NODE
 
       - name: Validate version against latest tag
-        id: validate-version
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ steps.remote.outputs.version }}
         run: |
           git fetch --tags --force
 
@@ -64,56 +91,66 @@ jobs:
 
           if [[ -z "$LATEST_TAG" ]]; then
             echo "No existing SemVer tag found. Version $VERSION can be the initial release."
-            echo "latest_tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           LATEST_VERSION="${LATEST_TAG#v}"
-
           echo "Latest tag: $LATEST_TAG"
           echo "package.json version: $VERSION"
 
           HIGHEST_VERSION="$(printf '%s\n%s\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)"
-
           if [[ "$HIGHEST_VERSION" != "$VERSION" || "$VERSION" == "$LATEST_VERSION" ]]; then
             echo "::error::Version $VERSION must be greater than latest tag $LATEST_TAG."
             exit 1
           fi
 
-          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Build Remote
+      - name: Build remote
         run: npm run build
 
       - name: Verify federation entry exists
-        run: test -f dist/remoteEntry.js
+        env:
+          ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
+        run: test -f "dist/$ENTRY_FILE"
 
       - name: Package versioned artifact
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ steps.remote.outputs.version }}
+          FEDERATION_NAME: ${{ steps.remote.outputs.federation_name }}
+          ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
         run: |
-          mkdir -p "release/remotes/remoteApp/$VERSION"
-          cp -R dist/. "release/remotes/remoteApp/$VERSION/"
+          mkdir -p "release/remotes/$FEDERATION_NAME/$VERSION"
+          cp -R dist/. "release/remotes/$FEDERATION_NAME/$VERSION/"
 
-          printf '{"remoteApp":"remotes/remoteApp/%s/remoteEntry.js"}\n' "$VERSION" \
+          printf '{"%s":"remotes/%s/%s/%s"}\n' \
+            "$FEDERATION_NAME" "$FEDERATION_NAME" "$VERSION" "$ENTRY_FILE" \
             > "release/microfrontends-$VERSION.json"
-
-          (cd release && zip -qr "../remote-$VERSION.zip" .)
 
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: remote-${{ steps.remote-version.outputs.version }}
-          path: remote-${{ steps.remote-version.outputs.version }}.zip
+          name: ${{ steps.remote.outputs.repository_name }}-${{ steps.remote.outputs.version }}
+          path: release/
           if-no-files-found: error
           retention-days: 30
 
+  tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Create version tag
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           TAG="v$VERSION"
 
@@ -127,5 +164,4 @@ jobs:
 
           git tag "$TAG"
           git push origin "$TAG"
-
           echo "Created version tag $TAG"
