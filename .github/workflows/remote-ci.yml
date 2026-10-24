@@ -116,7 +116,6 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ steps.remote.outputs.version }}
-          REMOTE_NAME: ${{ steps.remote.outputs.repository_name }}
           FEDERATION_NAME: ${{ steps.remote.outputs.federation_name }}
           ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
         run: |
@@ -127,16 +126,11 @@ jobs:
             "$FEDERATION_NAME" "$FEDERATION_NAME" "$VERSION" "$ENTRY_FILE" \
             > "release/microfrontends-$VERSION.json"
 
-          (cd release && zip -qr "../$REMOTE_NAME-$VERSION.zip" .)
-
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
-        env:
-          REMOTE_NAME: ${{ steps.remote.outputs.repository_name }}
-          VERSION: ${{ steps.remote.outputs.version }}
         with:
           name: ${{ steps.remote.outputs.repository_name }}-${{ steps.remote.outputs.version }}
-          path: ${{ steps.remote.outputs.repository_name }}-${{ steps.remote.outputs.version }}.zip
+          path: release/
           if-no-files-found: error
           retention-days: 30
 
