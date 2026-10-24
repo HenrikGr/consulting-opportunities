@@ -1,6 +1,6 @@
 import React from 'react';
 
-const consultingOpportunitiesVersion = __CONSULTING_OPPORTUNITIES_VERSION__;
+const consultingOpportunitiesVersion = __REMOTE_VERSION__;
 
 export default function FeatureButton() {
   return (
