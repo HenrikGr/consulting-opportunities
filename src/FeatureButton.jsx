@@ -1,13 +1,13 @@
 import React from 'react';
 
-const remoteVersion = __REMOTE_VERSION__;
+const consultingOpportunitiesVersion = __CONSULTING_OPPORTUNITIES_VERSION__;
 
 export default function FeatureButton() {
   return (
       <button
           type="button"
           onClick={() =>
-              window.dispatchEvent(new CustomEvent('remote-poc:clicked'))
+              window.dispatchEvent(new CustomEvent('consulting-opportunities:clicked'))
           }
           style={{
             background: '#2459a9',
@@ -18,7 +18,7 @@ export default function FeatureButton() {
             cursor: 'pointer',
           }}
       >
-        Remote feature — v{remoteVersion}
+        Consulting Opportunities — v{consultingOpportunitiesVersion}
       </button>
   );
 }
