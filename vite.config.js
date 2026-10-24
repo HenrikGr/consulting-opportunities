@@ -16,7 +16,7 @@ export default defineConfig({
     }),
   ],
   define: {
-    __CONSULTING_OPPORTUNITIES_VERSION__: JSON.stringify(packageJson.version),
+    __REMOTE_VERSION__: JSON.stringify(packageJson.version),
   },
   build: { target: 'esnext', outDir: 'dist', emptyOutDir: true },
   server: { port: 5001, strictPort: true },
