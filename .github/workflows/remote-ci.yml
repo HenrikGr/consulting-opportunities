@@ -29,7 +29,7 @@ jobs:
         run: npm ci
 
       - name: Read Consulting Opportunities version
-        id: remote-version
+        id: consulting-opportunities-version
         shell: bash
         run: |
           VERSION="$(node -p "require('./package.json').version")"
@@ -46,7 +46,7 @@ jobs:
         id: validate-version
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ steps.consulting-opportunities-version.outputs.version }}
         run: |
           git fetch --tags --force
 
@@ -91,7 +91,7 @@ jobs:
       - name: Package versioned artifact
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ steps.consulting-opportunities-version.outputs.version }}
         run: |
           mkdir -p "release/remotes/consultingOpportunities/$VERSION"
           cp -R dist/. "release/remotes/consultingOpportunities/$VERSION/"
@@ -104,8 +104,8 @@ jobs:
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: consulting-opportunities-${{ steps.remote-version.outputs.version }}
-          path: consulting-opportunities-${{ steps.remote-version.outputs.version }}.zip
+          name: consulting-opportunities-${{ steps.consulting-opportunities-version.outputs.version }}
+          path: consulting-opportunities-${{ steps.consulting-opportunities-version.outputs.version }}.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -113,7 +113,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
-          VERSION: ${{ steps.remote-version.outputs.version }}
+          VERSION: ${{ steps.consulting-opportunities-version.outputs.version }}
         run: |
           TAG="v$VERSION"
 
