@@ -4,8 +4,8 @@ import FeatureButton from './FeatureButton.jsx';
 
 createRoot(document.getElementById('root')).render(
   <main style={{ fontFamily: 'system-ui', padding: '2rem' }}>
-    <h1>Remote PoC</h1>
-    <p>This standalone page verifies that the Remote builds independently.</p>
+    <h1>Consulting Opportunities</h1>
+    <p>This standalone page verifies that Consulting Opportunities builds independently.</p>
     <FeatureButton />
   </main>,
 );
