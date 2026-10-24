@@ -1,5 +1,5 @@
-# Host / Remote Module Federation PoC
+# Consulting Opportunities — Module Federation Remote
 
-Minimal Host application for the Module Federation proof of concept. It reads `public/microfrontends.json` at runtime, so a runtime URL change should not require rebuilding the Host.
+Consulting Opportunities is a Module Federation remote application. The Host loads its exposed `FeatureButton` module at runtime through the `consultingOpportunities` federation identity. The remote entry is `consultingOpportunitiesEntry.js`.
 
-Live deployment and rollback are not yet configured; the PoC currently needs CI workflows and a hosting target that can serve the Remote artifacts. The repository is private, so do not publish the app publicly without an explicit decision.
+Live deployment and rollback are not yet configured; the project currently needs CI workflows and a hosting target that can serve versioned Consulting Opportunities artifacts. The repository is private, so do not publish the app publicly without an explicit decision.
