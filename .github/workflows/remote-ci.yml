@@ -1,4 +1,4 @@
-name: Remote CI and Versioned Artifact
+name: Remote CI and GitHub Release
 
 on:
   push:
@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.remote.outputs.version }}
+      repository_name: ${{ steps.remote.outputs.repository_name }}
+      federation_name: ${{ steps.remote.outputs.federation_name }}
+      entry_file: ${{ steps.remote.outputs.entry_file }}
+      latest_tag: ${{ steps.version.outputs.latest_tag }}
 
     steps:
       - name: Checkout
@@ -29,6 +33,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run tests
+        run: npm test
 
       - name: Read and validate remote configuration
         id: remote
@@ -63,14 +70,10 @@ jobs:
             `entry_file=${entryFile}`,
             `version=${version}`,
           ].join('\n') + '\n');
-
-          console.log(`Remote: ${repositoryName}`);
-          console.log(`Federation identity: ${federationName}`);
-          console.log(`Entry file: ${entryFile}`);
-          console.log(`Version: ${version}`);
           NODE
 
       - name: Validate version against latest tag
+        id: version
         shell: bash
         env:
           VERSION: ${{ steps.remote.outputs.version }}
@@ -91,50 +94,47 @@ jobs:
 
           if [[ -z "$LATEST_TAG" ]]; then
             echo "No existing SemVer tag found. Version $VERSION can be the initial release."
-            exit 0
+          else
+            LATEST_VERSION="${LATEST_TAG#v}"
+            echo "Latest tag: $LATEST_TAG"
+            echo "package.json version: $VERSION"
+
+            HIGHEST_VERSION="$(printf '%s\n%s\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)"
+            if [[ "$HIGHEST_VERSION" != "$VERSION" || "$VERSION" == "$LATEST_VERSION" ]]; then
+              echo "::error::Version $VERSION must be greater than latest tag $LATEST_TAG."
+              exit 1
+            fi
           fi
 
-          LATEST_VERSION="${LATEST_TAG#v}"
-          echo "Latest tag: $LATEST_TAG"
-          echo "package.json version: $VERSION"
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
 
-          HIGHEST_VERSION="$(printf '%s\n%s\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)"
-          if [[ "$HIGHEST_VERSION" != "$VERSION" || "$VERSION" == "$LATEST_VERSION" ]]; then
-            echo "::error::Version $VERSION must be greater than latest tag $LATEST_TAG."
+      - name: Build remote for its versioned GitHub Release URL
+        env:
+          VITE_REMOTE_ASSET_BASE_URL: https://github.com/${{ github.repository }}/releases/download/v${{ steps.remote.outputs.version }}/
+        run: npm run build
+
+      - name: Verify federation entry and flat release assets
+        env:
+          ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
+        shell: bash
+        run: |
+          test -f "dist/$ENTRY_FILE"
+          if find dist -mindepth 2 -type f -print -quit | grep -q .; then
+            echo "::error::Release assets must be in the dist root because GitHub Release assets do not preserve directory paths."
+            find dist -mindepth 2 -type f
             exit 1
           fi
 
-      - name: Build remote
-        run: npm run build
-
-      - name: Verify federation entry exists
-        env:
-          ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
-        run: test -f "dist/$ENTRY_FILE"
-
-      - name: Package versioned artifact
-        shell: bash
-        env:
-          VERSION: ${{ steps.remote.outputs.version }}
-          FEDERATION_NAME: ${{ steps.remote.outputs.federation_name }}
-          ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
-        run: |
-          mkdir -p "release/remotes/$FEDERATION_NAME/$VERSION"
-          cp -R dist/. "release/remotes/$FEDERATION_NAME/$VERSION/"
-
-          printf '{"%s":"remotes/%s/%s/%s"}\n' \
-            "$FEDERATION_NAME" "$FEDERATION_NAME" "$VERSION" "$ENTRY_FILE" \
-            > "release/microfrontends-$VERSION.json"
-
-      - name: Upload CI artifact
+      # Retained for local development tooling; production distribution uses GitHub Releases.
+      - name: Upload CI artifact for local development
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.remote.outputs.repository_name }}-${{ steps.remote.outputs.version }}
-          path: release/
+          path: dist/
           if-no-files-found: error
           retention-days: 30
 
-  tag:
+  release:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
@@ -144,24 +144,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Create version tag
+      - name: Download built Remote files
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.repository_name }}-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Create this Remote's manifest
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.build.outputs.version }}
+          FEDERATION_NAME: ${{ needs.build.outputs.federation_name }}
+          ENTRY_FILE: ${{ needs.build.outputs.entry_file }}
+          PREVIOUS_TAG: ${{ needs.build.outputs.latest_tag }}
         run: |
-          TAG="v$VERSION"
-
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists. Published versions must not be reused."
-            exit 1
+          FALLBACK_TAG=""
+          if [[ -n "$PREVIOUS_TAG" ]] &&
+             gh release view "$PREVIOUS_TAG" --json assets --jq '.assets[].name' 2>/dev/null |
+               grep -Fxq "$ENTRY_FILE"; then
+            FALLBACK_TAG="$PREVIOUS_TAG"
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          FALLBACK_TAG="$FALLBACK_TAG" node scripts/create-remote-manifest.mjs
 
-          git tag "$TAG"
-          git push origin "$TAG"
-          echo "Created version tag $TAG"
+      - name: Publish versioned Remote Release and manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.build.outputs.repository_name }} v${{ needs.build.outputs.version }}
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*
+            remote-manifest.json
