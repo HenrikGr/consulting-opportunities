@@ -113,6 +113,9 @@ jobs:
           VITE_REMOTE_ASSET_BASE_URL: https://github.com/${{ github.repository }}/releases/download/v${{ steps.remote.outputs.version }}/
         run: npm run build
 
+      - name: Remove generated type declarations from release payload
+        run: rm -rf dist/@mf-types
+
       - name: Verify federation entry and flat release assets
         env:
           ENTRY_FILE: ${{ steps.remote.outputs.entry_file }}
@@ -120,7 +123,7 @@ jobs:
         run: |
           test -f "dist/$ENTRY_FILE"
           if find dist -mindepth 2 -type f -print -quit | grep -q .; then
-            echo "::error::Release assets must be in the dist root because GitHub Release assets do not preserve directory paths."
+            echo "::error::Runtime release assets must be in the dist root because GitHub Release assets do not preserve directory paths."
             find dist -mindepth 2 -type f
             exit 1
           fi
