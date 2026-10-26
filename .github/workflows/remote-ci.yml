@@ -18,7 +18,7 @@ jobs:
       repository_name: ${{ steps.remote.outputs.repository_name }}
       federation_name: ${{ steps.remote.outputs.federation_name }}
       entry_file: ${{ steps.remote.outputs.entry_file }}
-      latest_tag: ${{ steps.remote.outputs.latest_tag }}
+      latest_tag: ${{ steps.version.outputs.latest_tag }}
 
     steps:
       - name: Checkout
@@ -70,6 +70,7 @@ jobs:
           NODE
 
       - name: Validate version against latest tag
+        id: version
         shell: bash
         env:
           VERSION: ${{ steps.remote.outputs.version }}
