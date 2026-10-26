@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 function releaseAssetUrl(repository, tag, fileName) {
   return `https://github.com/${repository}/releases/download/${tag}/${fileName}`;
@@ -35,7 +36,7 @@ export function createRemoteManifest({
   };
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const manifest = createRemoteManifest({
     repository: process.env.REPOSITORY,
     version: process.env.VERSION,
@@ -44,6 +45,6 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     fallbackTag: process.env.FALLBACK_TAG || null,
   });
 
-  fs.writeFileSync('remote-manifest.json', `${JSON.stringify(manifest, null, 2)}\\n`);
+  fs.writeFileSync('remote-manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   console.log('Created remote-manifest.json');
 }
