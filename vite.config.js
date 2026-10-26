@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { federation } from '@module-federation/vite';
 import packageJson from './package.json';
 
-const federationName = packageJson.name.replace(/[-_.\\s]+(.)?/g, (_, character) =>
+const federationName = packageJson.name.replace(/[-_.\s]+(.)?/g, (_, character) =>
   character ? character.toUpperCase() : '',
 );
 
