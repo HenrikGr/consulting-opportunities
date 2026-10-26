@@ -51,12 +51,12 @@ jobs:
             process.exit(1);
           }
 
-          if (!/^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$/.test(version)) {
+          if (!/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version)) {
             console.error(`package.json version '${version}' must use stable SemVer format X.Y.Z.`);
             process.exit(1);
           }
 
-          const federationName = repositoryName.replace(/[-_.\\s]+(.)?/g, (_, character) =>
+          const federationName = repositoryName.replace(/[-_.\s]+(.)?/g, (_, character) =>
             character ? character.toUpperCase() : '',
           );
           const entryFile = `${federationName}Entry.js`;
@@ -66,7 +66,7 @@ jobs:
             `federation_name=${federationName}`,
             `entry_file=${entryFile}`,
             `version=${version}`,
-          ].join('\\n') + '\\n');
+          ].join('\n') + '\n');
           NODE
 
       - name: Validate version against latest tag
@@ -81,9 +81,9 @@ jobs:
           LATEST_TAG=""
 
           while IFS= read -r TAG; do
-            if [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$ ]]; then
+            if [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
               if [[ -z "$LATEST_TAG" ]] ||
-                 [[ "$(printf '%s\\n%s\\n' "${LATEST_TAG#v}" "${TAG#v}" | sort -V | tail -n 1)" == "${TAG#v}" ]]; then
+                 [[ "$(printf '%s\n%s\n' "${LATEST_TAG#v}" "${TAG#v}" | sort -V | tail -n 1)" == "${TAG#v}" ]]; then
                 LATEST_TAG="$TAG"
               fi
             fi
@@ -96,7 +96,7 @@ jobs:
             echo "Latest tag: $LATEST_TAG"
             echo "package.json version: $VERSION"
 
-            HIGHEST_VERSION="$(printf '%s\\n%s\\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)"
+            HIGHEST_VERSION="$(printf '%s\n%s\n' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)"
             if [[ "$HIGHEST_VERSION" != "$VERSION" || "$VERSION" == "$LATEST_VERSION" ]]; then
               echo "::error::Version $VERSION must be greater than latest tag $LATEST_TAG."
               exit 1
