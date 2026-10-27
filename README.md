@@ -1,35 +1,79 @@
 # Consulting Opportunities — Module Federation Remote
 
-Consulting Opportunities is a Module Federation remote application. The Host loads its exposed `FeatureButton` module at runtime through the `consultingOpportunities` federation identity. The remote entry is `consultingOpportunitiesEntry.js`.
+Consulting Opportunities is a React feature exposed as a Module Federation Remote. The Host loads it at runtime rather than bundling it into the Host build.
 
-## Host integration contract
+## How to integrate with the Host
 
 The consuming Host in this PoC is [`HenrikGr/hgc-ab`](https://github.com/HenrikGr/hgc-ab).
 
-- Federation identity: `consultingOpportunities` (derived from the package name by `vite.config.js`).
-- Exposed module: `./FeatureButton`.
-- Remote entry filename: `consultingOpportunitiesEntry.js`.
-- The Host loads the module using the manifest; it does not build the Remote into its own bundle.
-- The current feature button emits the browser event `consulting-opportunities:clicked` when clicked. This is a PoC event contract, not a general application API.
+- **Federation identity:** `consultingOpportunities`, derived from the package name by `vite.config.js`.
+- **Exposed module:** `./FeatureButton`.
+- **Remote entry:** `consultingOpportunitiesEntry.js`.
+- **Discovery:** configure the Host to use the stable manifest URL below. The Host loads the manifest and then the version-specific entry.
+- **Current event:** the feature button dispatches `consulting-opportunities:clicked`. This is a PoC signal, not a stable application API or general cross-repository contract.
 
-## Release and manifest
-
-A successful push to `main` with a new stable version in `package.json` builds the Remote and publishes a GitHub Release tagged `vX.Y.Z`. The release contains the versioned build files and `remote-manifest.json`.
-
-The manifest describes only this Remote. It includes the current release's entry URL and, when a previous release with compatible assets exists, a fallback entry URL. The stable manifest URL for consumers is:
+Stable manifest URL:
 
 `https://github.com/HenrikGr/consulting-opportunities/releases/latest/download/remote-manifest.json`
 
-The Host's `public/microfrontends.json` points to that stable URL. The manifest's current and fallback entry URLs point to version-specific assets, for example `releases/download/v1.0.6/consultingOpportunitiesEntry.js`. Release builds write version-specific GitHub Release URLs into generated module references so entry files and their chunks are loaded from the same release version.
+The Host's `public/microfrontends.json` points to this URL. See the Host's [Microfrontend Architecture](https://github.com/HenrikGr/hgc-ab/blob/main/docs/MICROFRONTEND-ARCHITECTURE.md) document for the complete loading and fallback flow.
 
-**Distribution contract:** consumers use the GitHub Release and its manifest, not a CI workflow artifact. Treat published release assets as immutable; publish a new version instead of replacing files in an existing release.
+## Technical modules
 
-## Local development and validation
+### Runtime dependencies
 
-- `npm run dev` starts the Remote on port `5001`.
-- `npm run build` builds the Remote.
-- `npm test` runs the Node test suite.
+| Module | Purpose |
+| --- | --- |
+| `react` | Defines the feature UI as React components. |
+| `react-dom` | Provides React's browser DOM rendering integration. |
+| `@module-federation/enhanced` | Provides Module Federation runtime capabilities used by the integration. |
 
-For the Host's local development, the Host Vite server proxies GitHub Release asset requests to keep browser requests same-origin. The proxy belongs to the Host and is not part of this Remote's deployed runtime.
+### Development and build dependencies
 
-The repository is public. Do not commit secrets or credentials.
+| Module | Purpose |
+| --- | --- |
+| `vite` | Runs the development server and builds the application. |
+| `@vitejs/plugin-react` | Integrates React support into Vite. |
+| `@module-federation/vite` | Integrates Module Federation with the Vite build. |
+| `vitest` | Test runner dependency available to the project. |
+| `playwright` | Browser automation tooling dependency. |
+
+The package scripts currently run the Node test runner through `npm test`; use the scripts defined in `package.json` as the source of truth for available commands.
+
+## How to publish a release
+
+The release workflow builds a stable package version and publishes a GitHub Release tagged `vX.Y.Z`. The release contains versioned build assets and `remote-manifest.json`. The manifest describes the current release and, when available, a fallback release.
+
+Version-specific asset URLs ensure that the entry and its chunks are loaded from the same release.
+
+**Distribution rules:**
+- Consumers use the GitHub Release and manifest, not a CI workflow artifact.
+- Treat published versioned release assets as immutable. Publish a new version instead of replacing files.
+- Release verification must fail if required assets are missing or unusable; publication must not proceed after failed verification.
+
+## How to run and develop locally
+
+Install dependencies and start the development server:
+
+```bash
+npm install
+npm run dev
+```
+
+The Remote development server runs on port `5001`.
+
+Build the Remote:
+
+```bash
+npm run build
+```
+
+Run the automated test suite:
+
+```bash
+npm test
+```
+
+The Host provides a local proxy for GitHub Release assets during Host development and preview; that proxy is owned by the Host and is not part of the Remote runtime.
+
+This repository is public. Do not commit secrets or credentials.
